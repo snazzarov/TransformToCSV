@@ -24,12 +24,13 @@ namespace TransformToCSV
     }
     public class CsvProcs { 
         private string connectionString;
-//        "Data Source=(localdb)\mssqllocaldb;Initial Catalog=HomeBank;Integrated Security=SSPI;Connection Timeout=180"
         private List<CsvColumns> listTable;
         private CsvColumns csv;
         private List<int> listId;
-//        string path = @"E:\Win7\Scripts\DocPages.csv";
         string path;
+        bool IsFirstTime = true;
+        string HeaderWithCaptions = "File, Folder, PageType, Patient, RequestID, SiteID, PageFrom, PageTo";
+
         public CsvProcs(string connDb, string pathFile)
         {
             connectionString = connDb;
@@ -66,17 +67,14 @@ namespace TransformToCSV
                 {
                     conn.Close();
                 }
-                string outMsg = "";
+/*                string outMsg = "";
                 foreach(int e in listId)
                 {
                     outMsg = outMsg + ", " + e.ToString();
                 }
                 Console.WriteLine(outMsg);
+*/
         }
-
-        bool IsFirstTime = true;
-        string HeaderWithCaptions = "File, Folder, PageType, Patient, RequestID, SiteID, PageFrom, PageTo";
-
         public void ExportToCSVFile()
         {
             if (IsFirstTime)
@@ -133,11 +131,23 @@ namespace TransformToCSV
             for (int i = listTable.Count - 1; i > 0; i--)
             {
                 prevType = listTable[i-1].PageType;
-                if (prevType.Equals(""))
-                    continue; 
+                // miss Cover Page 
+                if (String.IsNullOrEmpty(prevType))
+                    continue;
+                // check unequality current and previous PageType
+                // check equality current and previous PatientName
+                // assign current PageType to previous row
                 if ((!prevType.Equals(listTable[i].PageType)) &&
                     (listTable[i].PatientName.Equals(listTable[i - 1].PatientName)))
-                    listTable[i-1].PageType = listTable[i].PageType;
+                {
+                    listTable[i - 1].PageType = listTable[i].PageType;
+                    // assign previous PageFrom to current row
+                    listTable[i].PageFrom = listTable[i - 1].PageFrom;
+                    // remove previous row at all
+                    listTable.RemoveAt(i - 1);
+                    // adjust index var after removing
+                    i--;
+                }
             }
         }
         private bool Less10Percent(int minI, int maxI)
@@ -327,7 +337,7 @@ namespace TransformToCSV
             int from = -1, to = -1;
             for (int i = 0; i < listTable.Count; i++)
             {
-                if (listTable[i].PatientName.Equals(""))
+                if (String.IsNullOrEmpty(listTable[i].PatientName))
                     continue;
                 if (from == -1)
                 {
@@ -402,7 +412,6 @@ Order by PageFrom";
                     SqlDataReader rdr = cmd.ExecuteReader();
                     while (rdr.Read())
                     {
-                        //                        csv.Id = (int)rdr[0];
                         CsvColumns csv = new CsvColumns();
                         csv.FileName = rdr[0] as string;
                         csv.FolderName = rdr[1] as string;
