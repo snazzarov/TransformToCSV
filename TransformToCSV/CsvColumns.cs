@@ -24,9 +24,11 @@ namespace TransformToCSV
     }
     public class CsvProcs { 
         private string connectionString;
+//        "Data Source=(localdb)\mssqllocaldb;Initial Catalog=HomeBank;Integrated Security=SSPI;Connection Timeout=180"
         private List<CsvColumns> listTable;
         private CsvColumns csv;
         private List<int> listId;
+//        string path = @"E:\Win7\Scripts\DocPages.csv";
         string path;
         public CsvProcs(string connDb, string pathFile)
         {
@@ -71,8 +73,20 @@ namespace TransformToCSV
                 }
                 Console.WriteLine(outMsg);
         }
+
+        bool IsFirstTime = true;
+        string HeaderWithCaptions = "File, Folder, PageType, Patient, RequestID, SiteID, PageFrom, PageTo";
+
         public void ExportToCSVFile()
         {
+            if (IsFirstTime)
+            {
+                StreamWriter file1 = new StreamWriter(path);
+                file1.WriteLine(HeaderWithCaptions);
+                file1.Close();
+                IsFirstTime = false;
+            }
+
             string row = "";
             using (System.IO.StreamWriter file = File.AppendText(path))
             {
@@ -90,6 +104,7 @@ namespace TransformToCSV
                           csv.PageTo.ToString();
                     file.WriteLine(row);
                 }
+                file.Close();
             }
         }
         public void TransformData()
@@ -145,7 +160,7 @@ namespace TransformToCSV
             for (int i = ii; i < listTable.Count; i++)
             {
                 // these pages can be at the start page: Cover Page, ...
-                if (listTable[i].PatientName.Equals(""))
+                if (string.IsNullOrEmpty(listTable[i].PatientName)) //.Equals("")) bug!
                     continue;
                 if (minI < 0)
                 {
@@ -208,7 +223,7 @@ namespace TransformToCSV
             for (int i = j; i < listTable.Count; i++)
             {
                 if ((minI == -1) &&
-                     !listTable[i].PatientName.Equals(""))      // CP and PQ
+                     !string.IsNullOrEmpty(listTable[i].PatientName))    // .Equals("") bug PatientName can be null   // CP and PQ
                     minI = i;
                 if (i == minI)
                 {
@@ -392,9 +407,9 @@ Order by PageFrom";
                         csv.FileName = rdr[0] as string;
                         csv.FolderName = rdr[1] as string;
                         csv.PageType = rdr[2] as string;
-                        csv.PatientName = rdr[3] as string;
-                        csv.ChartId = rdr[4] as string;
-                        csv.SiteId = (int)rdr[5];
+                        csv.PatientName = (rdr[3] as string) ?? string.Empty; // bug can be null later used as not null
+                        csv.ChartId = rdr[4] as string ?? string.Empty; 
+                        csv.SiteId = (int)((rdr[5] as int?) ?? 0);
                         csv.PageFrom = (int)rdr[6];
                         csv.PageTo = (int)rdr[7];
 //                        csv.PageNr = (int)rdr[6];

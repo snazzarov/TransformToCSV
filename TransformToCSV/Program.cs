@@ -10,8 +10,9 @@ namespace TransformToCSV
     {
         static void Main(string[] args)
         {
-            string connection = "Data Source = (localdb)\\MSSQLLocalDB; Initial Catalog = VercendPOC_Staging; Integrated Security = SSPI";
-            string filePath = @"E:\Win7\Scripts\DocPages.csv";
+            string connection = Properties.Settings.Default.ConnectionString;
+            //"Data Source = (localdb)\\MSSQLLocalDB; Initial Catalog = VercendPOC_Staging; Integrated Security = SSPI";
+            string filePath = Properties.Settings.Default.OutputFilePath;
 
             CsvProcs prc = new CsvProcs(connection, filePath);
             prc.GetDocumentId();
