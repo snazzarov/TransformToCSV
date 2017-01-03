@@ -67,13 +67,7 @@ namespace TransformToCSV
                 {
                     conn.Close();
                 }
-/*                string outMsg = "";
-                foreach(int e in listId)
-                {
-                    outMsg = outMsg + ", " + e.ToString();
-                }
-                Console.WriteLine(outMsg);
-*/
+            Console.WriteLine(string.Format("Documents selecte to process: {0}", listId.Count));
         }
         public void ExportToCSVFile()
         {
@@ -382,9 +376,9 @@ Select  d.ImageFiles as FileName,
 		p.PreSiteID as SiteId,
        p.PageNr as PageFrom
      	,p.PageNr as PageTo
-From [VercendPOC_Staging].[dbo].[Documents] d inner join [VercendPOC_Staging].[dbo].[DocumentPages] p 
+From [dbo].[Documents] d inner join [dbo].[DocumentPages] p 
 		on (d.ID = p.DocumentID)
-		inner join [VercendPOC_Staging].[dbo].[DocumentPageTypes] t
+		inner join [dbo].[DocumentPageTypes] t
 		on (t.ID = p.PreDocumentPageTypeID) 
 		and t.Name in ('Cover Page')
 		and d.Id = @DocId
@@ -398,9 +392,9 @@ Select  d.ImageFiles as FileName,
 		p.PreSiteID as SiteId
 		,min(p.PageNr) as pageFrom
 		,max(p.PageNr) as PageTo
-From [VercendPOC_Staging].[dbo].[Documents] d inner join [VercendPOC_Staging].[dbo].[DocumentPages] p 
+From [dbo].[Documents] d inner join [dbo].[DocumentPages] p 
 		on (d.ID = p.DocumentID)
-		inner join [VercendPOC_Staging].[dbo].[DocumentPageTypes] t
+		inner join [dbo].[DocumentPageTypes] t
 		on (t.ID = p.PreDocumentPageTypeID) 
 		and t.Name not in ('Poor Quality', 'Cover Page')
 		and d.Id = @DocId
@@ -421,7 +415,6 @@ Order by PageFrom";
                         csv.SiteId = (int)((rdr[5] as int?) ?? 0);
                         csv.PageFrom = (int)rdr[6];
                         csv.PageTo = (int)rdr[7];
-//                        csv.PageNr = (int)rdr[6];
                         listTable.Add(csv);
                     }
                     rdr.Close();
@@ -440,7 +433,7 @@ Order by PageFrom";
                 string outMsg = "";
                 foreach (CsvColumns e in listTable)
                 {
-                    outMsg = outMsg + ", " + e.FileName + ", " + e.PageNr.ToString() + "\n\r";
+                    outMsg = outMsg + ", " + e.FileName + ", " + e.PageNr.ToString() + "\n";
                 }
             if (outMsg.Length > 0)
                 Console.WriteLine(outMsg);
