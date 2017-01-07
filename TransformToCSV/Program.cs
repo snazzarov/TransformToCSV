@@ -13,7 +13,8 @@ namespace TransformToCSV
             string connection = Properties.Settings.Default.ConnectionString;
             string filePath = Properties.Settings.Default.OutputFilePath;
 
-            CsvProcs prc = new CsvProcs(connection, filePath);
+//            CsvProcs prc = new CsvProcs(connection, filePath);
+            Transform prc = new Transform(connection, filePath);
             prc.GetDocumentId();
             prc.TransformData();
         }

@@ -8,31 +8,8 @@ using System.Threading.Tasks;
 
 namespace TransformToCSV
 {
-    public class CsvColumns
+    public class Transform
     {
-        public int Id;
-        public string FileName;
-        public string FolderName;
-        public int DuplicatOf;
-        public string PageType;
-        public string PatientName;
-        public string ChartId;
-        public int SiteId;
-        public int PageFrom;
-        public int PageTo;
-        // PageNr is excluded from CSV-file
-        public int PageNr;
-
-        internal bool isTheSamePatient(CsvColumns csvColumns)
-        {
-            return PatientName.ToUpper() == csvColumns.PatientName.ToUpper();
-        }
-        internal bool isCoverPage(CsvColumns csvColumns)
-        {
-            return String.IsNullOrEmpty(csvColumns.PatientName);
-        }
-    }
-    public class CsvProcs { 
         private string connectionString;
         private List<CsvColumns> listTable;
         private CsvColumns csv;
@@ -43,7 +20,7 @@ namespace TransformToCSV
         const string COVER_PAGE = "Cover Page";
         const string EMPTY_STRING = "";
 
-        public CsvProcs(string connDb, string pathFile)
+        public Transform(string connDb, string pathFile)
         {
             connectionString = connDb;
             path = pathFile;
@@ -52,8 +29,6 @@ namespace TransformToCSV
         {
             int currentId;
             listId = new List<int>();
-//            Console.WriteLine(connectionString);
-//            Console.ReadLine();
             using (var conn = new SqlConnection(connectionString))
                 try
                 {
@@ -62,7 +37,6 @@ namespace TransformToCSV
                                     From Documents
                                     Order by Id";
                     SqlCommand cmd = new SqlCommand(sql, conn);
-                    //                    cmd.Parameters.AddWithValue("DocId", Dob);
                     SqlDataReader rdr = cmd.ExecuteReader();
                     while (rdr.Read())
                     {
@@ -116,14 +90,15 @@ namespace TransformToCSV
         }
         public void TransformData()
         {
-            foreach(int idd in listId)
+            foreach (int idd in listId)
             {
-                if (idd == 4)
-                {
+//                if (idd == 4)
+//                {
                     FillingPageList(idd);
+                    ExportToCSVFile();
                     TransformList();
                     ExportToCSVFile();
-                }
+//                }
             }
         }
         /*
@@ -142,7 +117,7 @@ namespace TransformToCSV
             string prevType = null;
             for (int i = listTable.Count - 1; i > 0; i--)
             {
-                prevType = listTable[i-1].PageType;
+                prevType = listTable[i - 1].PageType;
                 // miss Cover Page 
                 if (String.IsNullOrEmpty(prevType))
                     continue;
@@ -154,223 +129,236 @@ namespace TransformToCSV
                 {
                     listTable[i - 1].PageType = listTable[i].PageType;
                     // assign previous PageFrom to curlistTablerent row
-//                    listTable[i].PageFrom = [i - 1].PageFrom;
+                    //                    listTable[i].PageFrom = [i - 1].PageFrom;
                     // remove previous row at all
-//                    listTable.RemoveAt(i - 1);
+                    //                    listTable.RemoveAt(i - 1);
                     // adjust index var after removing
-//                    i--;
+                    //                    i--;
                 }
             }
         }
-        private bool Less10Percent(int minI, int maxI)
+        private List<string> FindPatients()
         {
-            if (((maxI - minI + 1) * listTable.Count / 100) < 10)
-                return true;
-            return false;
-        }
-        private bool NoPatientFuther(string patient, int i)
-        {
-            for(int j = i; j<listTable.Count;j++)
-                if (listTable[j].PatientName.Equals(patient))
-                    return false;
-            return true;
-        }
-        private bool TakeSmallPiece(ref int minI, ref int maxI, ref string prevPatient, ref string nextPatient)
-        {
-            string patient = EMPTY_STRING;
-            int ii = minI < 0 ? 0 : minI;
-            for (int i = ii; i < listTable.Count; i++)
-            {
-                // these pages can be only at the start page: Cover Page, ...
-                if (string.IsNullOrEmpty(listTable[i].PatientName)) //.Equals("")) bug!
-                    continue;
-                if (minI < 0)
+            var uniquePatients = listTable
+                .Where(x => x.PageType != COVER_PAGE)
+                .Select(x => x.PatientName)
+                .Distinct()
+                .ToList();
+            return uniquePatients;
+/*
+            List<string> resultList = new List<string>();
+            string patient = "";
+            int i = 0;
+            SkipCoverPage(ref i);
+            for (; i < listTable.Count; i++)
+                if (!IsEqualPatients(patient, listTable[i].PatientName))
                 {
-                    minI = i;
+                    resultList.Add(listTable[i].PatientName);
                     patient = listTable[i].PatientName;
-                    prevPatient = EMPTY_STRING;
-                    continue;
                 }
-                if ((minI == i) && (i > 0))
-                    prevPatient = listTable[i - 1].PatientName;
-                if (listTable[i].PatientName.Equals(patient))
-                    continue;
                 else
-                {
-                    if (Less10Percent(minI, i - 1)) // && NoPatientFuther(patient, i))
-                    {
-                        maxI = i - 1;
-                        if (minI <= maxI)
-                        {
-                            nextPatient = listTable[i].PatientName;
-                            return true;
-                        }
-                        else
-                            return false;
-                    }
-                }
-            }
-            return false;
+                    continue;
+            return resultList;
+*/
         }
-        private void AssignPatient(int minI, int maxI, string patient)
+        /*
+         * condensed : if records are condensed: record contains of several pages: from PageFrom upto PageTo.
+         */
+        private int NumberOfPages(bool condensed)
         {
-            for (int i = minI; i <= maxI; i++)
+            int result = 0;
+            for (int i = 0; i < listTable.Count; i++)
+                if (condensed)
+                    result += listTable[i].PageTo - listTable[i].PageFrom + 1;
+                else
+                    result += 1;
+            return result;
+        }
+        private void List10Percent(string patient, ref int iFirstProcessed, ref int iLastProcessed)
+        {
+            int pageNumber = 0;
+            for (int i = 0; i < listTable.Count; i++)
+                if (IsEqualPatients(patient, listTable[i].PatientName))
+                {
+                    pageNumber += 1;
+                    if (iFirstProcessed == -1)
+                        iFirstProcessed = i;
+                    iLastProcessed = i;
+                }
+            // pageNumber += listTable[i].PageTo - listTable[i].PageFrom;
+            if ((100 * pageNumber) / NumberOfPages(false) >= 10)
+                iFirstProcessed = iLastProcessed = -1;            
+            // return iFirstProcessed and iLastProcessed
+        }
+        private void Assign10Patient(string patient, int iFirstPatient, int iLastPatient)
+        {
+            for(int i = iFirstPatient; i <= iLastPatient; i++)
                 listTable[i].PatientName = patient;
         }
         /*
             3) if patient is found in less than 10% of records -> consider this to be Previous (if no previous -> next)
             Note: if p1 is mentioned in the doc more than once -> keep as is
         */
-        private void Check3rdNew()
-        {
-
-        }
         private void Check3rdCondition()
         {
-            bool result = true;
-            int minI = -1, maxI = -1;
-            string prevPatient = EMPTY_STRING, nextPatient = EMPTY_STRING;
-            while (minI < listTable.Count)
+//            int iFirstProcessed = -1, iLastProcessed = -1;
+            List<Tuple<string,int>> distinctPatientsCounts = listTable
+                .Where(x=>x.PageType != COVER_PAGE)
+                .GroupBy(x=>x.PatientName)
+                .Select(x=>Tuple.Create<string,int>(x.Key, x.Count()))
+                .ToList();
+
+            var candidatesToRemove = distinctPatientsCounts
+                .Where(x => x.Item2 <= listTable.Count / 10)
+                .ToList();
+
+            if (candidatesToRemove.Count != 1)
+                return;
+            
+            int indexOfFirst = listTable
+                                .Select((x,index)=>Tuple.Create<string,int>(x.PatientName, index))
+                                .Where(x =>x.Item1 == candidatesToRemove[0].Item1)
+                                .First()
+                                .Item2;
+
+            //int indexOfFirst = listTable.Where(x=>x.PageNr == pageOfFirst).
+
+            int indexOfLast = indexOfFirst + candidatesToRemove[0].Item2 - 1;
+
+            //int iRecordToTake = indexOfFirst == 0 ? indexOfLast + 1 : indexOfFirst - 1;
+            int iRecordToTake = FindBasicPage(indexOfFirst, indexOfLast);
+            if (iRecordToTake == -1)
+                return;
+            for (int i=indexOfFirst; i <= indexOfLast; i++)
             {
-                result = TakeSmallPiece(ref minI, ref maxI, ref prevPatient, ref nextPatient);
-                if (!result)
-                    break;
-                if (prevPatient.Length > 0)
-                    AssignPatient(minI, maxI, prevPatient);
-                else
-                    AssignPatient(minI, maxI, nextPatient);
-                minI = maxI + 1;
+                listTable[i].PatientName = listTable[iRecordToTake].PatientName;
+                listTable[i].SiteId = listTable[iRecordToTake].SiteId;
+                listTable[i].ChartId = listTable[iRecordToTake].ChartId;
+                listTable[i].PageType = listTable[iRecordToTake].PageType;
             }
-        }
-        private string Take1stPiece(ref int minI, ref int maxI)
-        {
-            string patient = EMPTY_STRING;
-            int j = minI < 0 ? 0 : minI;
-            for (int i = j; i < listTable.Count; i++)
+
+            /*
+            //            var distinctPatients = FindPatients();
+            for (int i = 0; i < distinctPatients.Count; i++)
             {
-                if ((minI == -1) &&
-                     !string.IsNullOrEmpty(listTable[i].PatientName))    // .Equals(EMPTY_STRING) bug PatientName can be null   // CP and PQ
-                    minI = i;
-                if (i == minI)
-                {
-                    patient = listTable[i].PatientName;
-                    continue;
-                }
-                else
-                {
-                    if (listTable[i].PatientName.Equals(patient))
-                        continue;
-                    else
+                if (i == 0)
+                {       // 1st patient: take next patient
+                    List10Percent(distinctPatients[0], ref iFirstProcessed, ref iLastProcessed);
+                    if (distinctPatients.Count > 1 && iFirstProcessed >= 0)
                     {
-                        maxI = i - 1;
-                        return patient;
+                        Assign10Patient(distinctPatients[1], iFirstProcessed, iLastProcessed);
+                        continue;
                     }
                 }
+                if (i == distinctPatients.Count - 1)
+                {       // last patient: take previous patient
+                    iFirstProcessed = iLastProcessed = -1;
+                    List10Percent(distinctPatients[i-1], ref iFirstProcessed, ref iLastProcessed);
+                    if (iFirstProcessed >= 0 && i > 1)
+                        Assign10Patient(distinctPatients[i - 1], iFirstProcessed, iLastProcessed);
+                    continue;
+                }
+                // intermidiate patients: take previous patient
+                iFirstProcessed = iLastProcessed = -1;
+                List10Percent(distinctPatients[i], ref iFirstProcessed, ref iLastProcessed);
+                if (iFirstProcessed >= 0 && i > 1)
+                    Assign10Patient(distinctPatients[i - 1], iFirstProcessed, iLastProcessed);
             }
-            return EMPTY_STRING;
+            */
         }
-        private string Take2ndPiece(ref int minI, ref int maxI, string patent1)
+
+        private int FindBasicPage(int indexOfFirst, int indexOfLast)
         {
-            string patient = EMPTY_STRING;
-            for (int i = minI; i < listTable.Count; i++)
+            for (int i=indexOfFirst-1; i >= 0; i--)
             {
-                if (i == minI)
-                {
-                    patient = listTable[i].PatientName;
-                    continue;
-                }
-                else
-                {
-                    if (listTable[i].PatientName.Equals(patient))
-                        continue;
-                    else
-                    {
-                        maxI = i - 1;
-                        if (maxI >= minI)
-                            return patient;
-                        else
-                            return EMPTY_STRING;
-                    }
-                }
+                if (listTable[i].PageType != COVER_PAGE)
+                    return i;
             }
-            return EMPTY_STRING;
-        }
-        private bool Take3rdPiece(ref int minI, ref int maxI, string patent1)
-        {
-            for (int i = minI; i < listTable.Count; i++)
-                if (listTable[i].PatientName.Equals(patent1))
-                    continue;
-                else
-                {
-                    maxI = i - 1;
-                    if (maxI >= minI)
-                        return true;
-                    return false;
-                }
-            maxI = listTable.Count - 1;
-            return true;
-        }
-        /*
-        4) if we have situation for pages:
-            1-m pages - Patien1, m+1-N -> Pationt2, N-last Patient1 -> Patient 1
-        */
-        private void Check4thCondition()
-        {
-            bool result = true;
-            int min1 = -1, max1 = -1, min2 = -1, max2 = -1, min3 = -1, max3 = -1;
-            string patient1 = EMPTY_STRING, patient2 = EMPTY_STRING;
-            while (min1 < listTable.Count)
+            for (int i=indexOfLast + 1;i<listTable.Count; i++)
             {
-                patient1 = Take1stPiece(ref min1, ref max1);
-                if (patient1.Length == 0)
-                    break;
-                min2 = max1 + 1;
-                patient2 = Take2ndPiece(ref min2, ref max2, patient1);
-                if (patient2.Length == 0)
-                    break;
-                min3 = max2 + 1;
-                result = Take3rdPiece(ref min3, ref max3, patient1);
-                if (!result)
+                if (listTable[i].PageType != COVER_PAGE)
+                    return i;
+            }
+            return -1;
+        }
+
+        private void SkipCoverPage(ref int iCurrent)
+    {
+        for (; iCurrent < listTable.Count; iCurrent++)
+            if (IsEqualPatients(listTable[iCurrent].PageType, COVER_PAGE))
+                continue;
+            else
+                break;
+    }
+    private List<CsvColumns> GroupPages(int iCurrent, ref int iLastProcessed, ref string patient)
+    {
+        List<CsvColumns> group = new List<CsvColumns>();
+        patient = listTable[iCurrent].PatientName;
+        iCurrent++;
+        for (; iCurrent < listTable.Count; iCurrent++)
+            if (IsEqualPatients(listTable[iCurrent].PatientName, patient))
+                group.Add(listTable[iCurrent]);
+            else
+            {
+                iLastProcessed = iCurrent;
+                return group;
+            }
+        iLastProcessed = listTable.Count - 1;
+        return group;
+    }
+    private void AssignPatient(string patient, List<CsvColumns> list)
+    {
+        for (int i = 0; i < list.Count; i++)
+            list[i].PatientName = patient;
+    }
+    private bool IsEqualPatients(string patient1, string patient2)
+    {
+        return patient1.ToUpper() == patient2.ToUpper();
+    }
+    /*
+    4) if we have situation for pages:
+        1-m pages - Patien1, m+1-N -> Pationt2, N-last Patient1 -> Patient 1
+    */
+    private void Check4thCondition()
+    {
+        int iLastProcessed = 0;
+        string patient1 = "", patient2 = "", patient3 = "";
+        var firstList = new List<CsvColumns>();
+        var secondList = new List<CsvColumns>();
+        var thirdList = new List<CsvColumns>();
+        int i = 0;
+        SkipCoverPage(ref i);
+        firstList = GroupPages(i, ref iLastProcessed, ref patient1);
+        if (firstList.Count > 0)
+        {
+            i = iLastProcessed + 1;
+            patient2 = patient1;
+            secondList = GroupPages(i, ref iLastProcessed, ref patient2);
+            if ((secondList.Count > 0) &&
+                 !IsEqualPatients(patient1, patient2))
+            {
+                i = iLastProcessed + 1;
+                thirdList = GroupPages(i, ref iLastProcessed, ref patient3);
+                if ((thirdList.Count > 0) &&
+                     IsEqualPatients(patient3, patient1) &&
+                    !IsEqualPatients(patient3, patient2))
                 {
-                    min1 = max3 + 1;
-                    continue;
+                    AssignPatient(patient1, secondList);
+                    listTable.Clear();
+                    listTable.AddRange(firstList);
+                    listTable.AddRange(secondList);
+                    listTable.AddRange(thirdList);
                 }
-                AssignPatient(min2, max2, patient1);
-                min1 = max3 + 1;
             }
         }
-        private void AssignPages(int from, int to)
+    }
+    private void AssignPages(int from, int to)
         {
             for (int i = from; i <= to; i++)
             {
                 listTable[i].PageFrom = listTable[from].PageNr;
                 listTable[i].PageTo = listTable[to].PageNr;
             }
-        }
-        private void Boundaries()
-        {
-            string patient = EMPTY_STRING;
-            int from = -1, to = -1;
-            for (int i = 0; i < listTable.Count; i++)
-            {
-                if (String.IsNullOrEmpty(listTable[i].PatientName))
-                    continue;
-                if (from == -1)
-                {
-                    from = i;
-                    patient = listTable[i].PatientName;
-                }
-                if (!listTable[i].PatientName.Equals(patient))
-                {
-                    to = i - 1;
-                    if (from <= to)
-                    {
-                        AssignPages(from, to);
-                        from = i;
-                    }
-                }
-            }
-            AssignPages(from, listTable.Count - 1);
         }
         /*
          * 5) cover page records for the document, if go one-after-another should be condesed to 1 with page from..to
@@ -430,7 +418,7 @@ namespace TransformToCSV
         private string GetChartId(int startPage, int endPage)
         {
             var groups = listTable
-                        .Where(w=>((w.PageFrom == -1) && (w.PageTo == -1)) || (w.PageFrom == startPage) && (w.PageTo == endPage))
+                        .Where(w => ((w.PageFrom == -1) && (w.PageTo == -1)) || (w.PageFrom == startPage) && (w.PageTo == endPage))
                         .GroupBy(n => n.ChartId)
                         .Select(n => new
                         {
@@ -446,7 +434,7 @@ namespace TransformToCSV
         {
             var groups = listTable
                         .Where(w => (((w.PageFrom == -1) && (w.PageTo == -1) ||
-                              (w.PageFrom == startPage && (w.PageTo == endPage))) &&         (w.ChartId == chartId)))
+                              (w.PageFrom == startPage && (w.PageTo == endPage))) && (w.ChartId == chartId)))
                         .GroupBy(n => n.SiteId)
                         .Select(n => new
                         {
@@ -477,7 +465,6 @@ namespace TransformToCSV
         private void Check56Condition()
         {
             var resultList = new List<CsvColumns>();
-//            if (listTable[0].PatientNam)
             for (int i = 0; i < listTable.Count; i++)
             {
                 if (listTable[i].PageType.Equals(COVER_PAGE))
@@ -502,16 +489,14 @@ namespace TransformToCSV
             int i = iCurrent;
             var pg = listTable[iCurrent];
             for (i = iCurrent + 1; i < listTable.Count; i++)
-            {
                 if (!pg.isTheSamePatient(listTable[i]))
                 {
-                    pg.PageTo = listTable[i-1].PageTo;
+                    pg.PageTo = listTable[i - 1].PageTo;
                     iLastProcessed = i - 1;
                     return;
                 }
-            }
-            pg.PageTo = listTable[listTable.Count-1].PageFrom;
-            iLastProcessed = listTable.Count-1;
+            pg.PageTo = listTable[listTable.Count - 1].PageFrom;
+            iLastProcessed = listTable.Count - 1;
         }
         /*
 * 6) if patient is the same on several pages -> one record, now we often have several, example i
@@ -520,7 +505,7 @@ namespace TransformToCSV
         {
             int prevPage = -1, prevIndex = -1, firstPage = -1;
             //, siteId = -1;
-            string patient = EMPTY_STRING;  
+            string patient = EMPTY_STRING;
             //, chartId = "", pageType = "";
 
             for (int i = 0; i < listTable.Count(); i++)
@@ -600,11 +585,12 @@ namespace TransformToCSV
         private void TransformList()
         {
             Check2ndCondition();
-//            Check4thCondition();
+            //            Check4thCondition();
             //            Check5thCondition();
             //            Check6thCondition();
-            Check56Condition();
-            Check4thCondition();
+            Check3rdCondition();
+          //  Check4thCondition();
+          //  Check56Condition();
             //            Check3rdCondition();
 
             //            Boundaries();
@@ -626,14 +612,15 @@ namespace TransformToCSV
 		'' as PatientName,
 		null as ChartId, 
 		p.PreSiteID as SiteId,
-       p.PageNr as PageFrom
-     	,p.PageNr as PageTo
+		p.PageNr as PageNr,
+        p.PageNr as PageFrom,
+     	p.PageNr as PageTo
 From [Documents] d inner join [DocumentPages] p 
 		on (d.ID = p.DocumentID)
 		inner join [DocumentPageTypes] t
 		on (t.ID = p.PreDocumentPageTypeID) 
 		and t.Name in ('Cover Page')
-		and d.Id = 4
+		and d.Id = 3
 union 
 Select  distinct 
 		d.ImageFiles as FileName, 
@@ -642,15 +629,16 @@ Select  distinct
 	    t.Name as PageType, 
 		p.PreMemberFirstName + ' ' + p.PreMemberLastName as PatientName,
 		p.PreChartID as ChartId, 
-		p.PreSiteID as SiteId
-		,p.PageNr as pageFrom
-		,p.PageNr as PageTo
+		p.PreSiteID as SiteId,
+		p.PageNr as PageNr,
+		p.PageNr as pageFrom,
+		p.PageNr as PageTo
 From [Documents] d inner join [DocumentPages] p 
 		on (d.ID = p.DocumentID)
 		inner join DocumentPageTypes t
 		on (t.ID = p.PreDocumentPageTypeID) 
 		and t.Name not in ('Poor Quality', 'Cover Page')
-		and d.Id = 4
+		and d.Id = 3
 Order by PageFrom";
                     SqlCommand cmd = new SqlCommand(sql, conn);
                     cmd.Parameters.AddWithValue("DocId", idd);
@@ -665,8 +653,9 @@ Order by PageFrom";
                         csv.PatientName = (rdr[4] as string) ?? string.Empty; // bug can be null later used as not null
                         csv.ChartId = rdr[5] as string ?? string.Empty;
                         csv.SiteId = (int)((rdr[6] as int?) ?? 0);
-                        csv.PageFrom = (int)rdr[7];
-                        csv.PageTo = (int)rdr[8];
+                        csv.PageNr = (int)rdr[7];
+                        csv.PageFrom = (int)rdr[8];
+                        csv.PageTo = (int)rdr[9];
                         listTable.Add(csv);
                     }
                     rdr.Close();
@@ -682,11 +671,11 @@ Order by PageFrom";
                 {
                     conn.Close();
                 }
-                string outMsg = EMPTY_STRING;
-                foreach (CsvColumns e in listTable)
-                {
-                    outMsg = outMsg + ", " + e.FileName + ", " + e.PageNr.ToString() + "\n";
-                }
+            string outMsg = EMPTY_STRING;
+            foreach (CsvColumns e in listTable)
+            {
+                outMsg = outMsg + ", " + e.FileName + ", " + e.PageNr.ToString() + "\n";
+            }
             if (outMsg.Length > 0)
                 Console.WriteLine(outMsg);
             else
