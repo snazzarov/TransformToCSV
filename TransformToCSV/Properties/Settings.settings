@@ -8,5 +8,8 @@
     <Setting Name="OutputFilePath" Type="System.String" Scope="User">
       <Value Profile="(Default)">C:\temp\VercendPOC\ProcessingReport.csv</Value>
     </Setting>
+    <Setting Name="LogFilePath" Type="System.String" Scope="User">
+      <Value Profile="(Default)">C:\temp\VercendPOC\ProcessingReport.log</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

@@ -19,12 +19,34 @@ namespace TransformToCSV
         string HeaderWithCaptions = "File, Folder, DuplicateOf, PageType, Patient, RequestID, SiteID, PageFrom, PageTo";
         const string COVER_PAGE = "Cover Page";
         const string EMPTY_STRING = "";
+        private string logFilePath;
 
-        public Transform(string connDb, string pathFile)
+        public Transform(string connDb, string pathFile, string logFilePath)
         {
             connectionString = connDb;
             path = pathFile;
+            this.logFilePath = logFilePath;
         }
+
+        bool IsFirstLogEntry = true;
+        void Log(string msg)
+        {
+            Console.WriteLine(msg);
+            if (IsFirstLogEntry)
+            {
+                StreamWriter file1 = new StreamWriter(logFilePath);
+                file1.WriteLine(msg);
+                file1.Close();
+                IsFirstLogEntry = false;
+                return;
+            }
+            using (System.IO.StreamWriter file = File.AppendText(logFilePath))
+            {
+                file.WriteLine(msg);
+                file.Close();
+            }
+        }
+
         public void GetDocumentId()
         {
             int currentId;
@@ -48,14 +70,14 @@ namespace TransformToCSV
                 catch (Exception ex)
                 {
                     String message = String.Format("GetDocumentId(): failed to load Ids", ex.Message);
-                    Console.WriteLine(message);
+                    Log(message);
                     return;
                 }
                 finally
                 {
                     conn.Close();
                 }
-            Console.WriteLine(string.Format("Documents selecte to process: {0}", listId.Count));
+            Log(string.Format("Documents selected to process: {0}", listId.Count));
         }
         public void ExportToCSVFile()
         {
@@ -88,17 +110,23 @@ namespace TransformToCSV
                 file.Close();
             }
         }
+
         public void TransformData()
         {
+            int iDoc = 0;
             foreach (int idd in listId)
             {
-//                if (idd == 4)
-//                {
-                    FillingPageList(idd);
-                    ExportToCSVFile();
-                    TransformList();
-                    ExportToCSVFile();
-//                }
+                FillingPageList(idd);
+                if (listTable.Count == 0)
+                    continue;
+                //ExportToCSVFile();
+                TransformList();
+                ExportToCSVFile();
+                iDoc++;
+                if (iDoc % 100 == 0)
+                {
+                    Log(string.Format("{0}: {1} Document(s) are processed", DateTime.Now.ToString(), iDoc));
+                }
             }
         }
         /*
@@ -208,83 +236,91 @@ namespace TransformToCSV
             }
             return -1;
         }
-    private void SkipCoverPage(ref int iCurrent)
-    {
-        for (; iCurrent < listTable.Count; iCurrent++)
-            if (IsEqualPatients(listTable[iCurrent].PageType, COVER_PAGE))
-                continue;
-            else
-                break;
-    }
-    private List<CsvColumns> GroupPages(int iCurrent, ref int iLastProcessed, ref string patient)
-    {
-        List<CsvColumns> group = new List<CsvColumns>();
-        patient = listTable[iCurrent].PatientName;
-        for (; iCurrent < listTable.Count; iCurrent++)
-            if (IsEqualPatients(listTable[iCurrent].PatientName, patient))
-                group.Add(listTable[iCurrent]);
-            else
+        private void SkipCoverPage(ref int iCurrent)
+        {
+            for (; iCurrent < listTable.Count; iCurrent++)
+                if (IsEqualPatients(listTable[iCurrent].PageType, COVER_PAGE))
+                    continue;
+                else
+                    break;
+        }
+        private List<CsvColumns> GroupPages(int iCurrent, ref int iLastProcessed, ref string patient)
+        {
+            List<CsvColumns> group = new List<CsvColumns>();
+            if (iCurrent > listTable.Count - 1)
             {
-                iLastProcessed = iCurrent;
+                iLastProcessed = listTable.Count - 1;
                 return group;
             }
-        iLastProcessed = listTable.Count - 1;
-        return group;
-    }
-    private void AssignPatient(string patient, List<CsvColumns> list)
-    {
-        for (int i = 0; i < list.Count; i++)
-            list[i].PatientName = patient;
-    }
-    private bool IsEqualPatients(string patient1, string patient2)
-    {
-        return patient1.ToUpper() == patient2.ToUpper();
-    }
-    /*
-    4) if we have situation for pages:
-        1-m pages - Patien1, m+1-N -> Pationt2, N-last Patient1 -> Patient 1
-    */
-    private void Check4thCondition()
-    {
-        int iLastProcessed = 0;
-        string patient1 = "", patient2 = "", patient3 = "";
-        var firstList = new List<CsvColumns>();
-        var secondList = new List<CsvColumns>();
-        var thirdList = new List<CsvColumns>();
-        int i = 0;
-        SkipCoverPage(ref i);
-        firstList = GroupPages(i, ref iLastProcessed, ref patient1);
-        if (firstList.Count > 0)
+
+            patient = listTable[iCurrent].PatientName;
+            for (; iCurrent < listTable.Count; iCurrent++)
+                if (IsEqualPatients(listTable[iCurrent].PatientName, patient))
+                    group.Add(listTable[iCurrent]);
+                else
+                {
+                    iLastProcessed = iCurrent;
+                    return group;
+                }
+            iLastProcessed = listTable.Count - 1;
+            return group;
+        }
+        private void AssignPatient(string patient, List<CsvColumns> list)
         {
-            i = iLastProcessed + 1;
-            patient2 = patient1;
-            secondList = GroupPages(i, ref iLastProcessed, ref patient2);
-            if ((secondList.Count > 0) &&
-                 !IsEqualPatients(patient1, patient2))
+            for (int i = 0; i < list.Count; i++)
+                list[i].PatientName = patient;
+        }
+        private bool IsEqualPatients(string patient1, string patient2)
+        {
+            return patient1.ToUpper() == patient2.ToUpper();
+        }
+        /*
+        4) if we have situation for pages:
+            1-m pages - Patien1, m+1-N -> Pationt2, N-last Patient1 -> Patient 1
+        */
+        private void Check4thCondition()
+        {
+            if (listTable.Count < 3)
+                return;
+            int iLastProcessed = 0;
+            string patient1 = "", patient2 = "", patient3 = "";
+            var firstList = new List<CsvColumns>();
+            var secondList = new List<CsvColumns>();
+            var thirdList = new List<CsvColumns>();
+            int i = 0;
+            SkipCoverPage(ref i);
+            firstList = GroupPages(i, ref iLastProcessed, ref patient1);
+            if (firstList.Count > 0 && iLastProcessed < firstList.Count-1)
             {
                 i = iLastProcessed + 1;
-                thirdList = GroupPages(i, ref iLastProcessed, ref patient3);
-                if ((thirdList.Count > 0) &&
-                     IsEqualPatients(patient3, patient1) &&
-                    !IsEqualPatients(patient3, patient2))
+                patient2 = patient1;
+                secondList = GroupPages(i, ref iLastProcessed, ref patient2);
+                if ((secondList.Count > 0) &&
+                     !IsEqualPatients(patient1, patient2))
                 {
-                    AssignPatient(patient1, secondList);
-                    listTable.Clear();
-                    listTable.AddRange(firstList);
-                    listTable.AddRange(secondList);
-                    listTable.AddRange(thirdList);
+                    i = iLastProcessed + 1;
+                    thirdList = GroupPages(i, ref iLastProcessed, ref patient3);
+                    if ((thirdList.Count > 0) &&
+                         IsEqualPatients(patient3, patient1) &&
+                        !IsEqualPatients(patient3, patient2))
+                    {
+                        AssignPatient(patient1, secondList);
+                        listTable.Clear();
+                        listTable.AddRange(firstList);
+                        listTable.AddRange(secondList);
+                        listTable.AddRange(thirdList);
+                    }
                 }
             }
         }
-    }
-    private void AssignPages(int from, int to)
-    {
-            for (int i = from; i <= to; i++)
-            {
-                listTable[i].PageFrom = listTable[from].PageNr;
-                listTable[i].PageTo = listTable[to].PageNr;
-            }
-    }
+        private void AssignPages(int from, int to)
+        {
+                for (int i = from; i <= to; i++)
+                {
+                    listTable[i].PageFrom = listTable[from].PageNr;
+                    listTable[i].PageTo = listTable[to].PageNr;
+                }
+        }
         /*
          * 5) cover page records for the document, if go one-after-another should be condesed to 1 with page from..to
          */
@@ -467,22 +503,15 @@ Order by PageFrom";
                 {
                     String message = String.Format("FillingList: failed list filling",
                         ex.Message);
-                    Console.WriteLine(message + " " + ex.Message);
+                    Log(message + "\n" + ex.Message);
                     return;
                 }
                 finally
                 {
                     conn.Close();
                 }
-            string outMsg = EMPTY_STRING;
-            foreach (CsvColumns e in listTable)
-            {
-                outMsg = outMsg + ", " + e.FileName + ", " + e.PageNr.ToString() + "\n";
-            }
-            if (outMsg.Length > 0)
-                Console.WriteLine(outMsg);
-            else
-                Console.WriteLine("Empty");
+            if (listTable.Count == 0)
+                Log(string.Format("Document ID: {0}, has no pages", idd));
         }
     }
 }

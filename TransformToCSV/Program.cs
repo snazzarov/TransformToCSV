@@ -12,8 +12,8 @@ namespace TransformToCSV
         {
             string connection = Properties.Settings.Default.ConnectionString;
             string filePath = Properties.Settings.Default.OutputFilePath;
-
-            Transform prc = new Transform(connection, filePath);
+            string logFilePath = Properties.Settings.Default.LogFilePath;
+            Transform prc = new Transform(connection, filePath, logFilePath);
             prc.GetDocumentId();
             prc.TransformData();
         }
