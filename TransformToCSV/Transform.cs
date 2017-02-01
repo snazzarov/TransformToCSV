@@ -16,7 +16,7 @@ namespace TransformToCSV
         private List<int> listId;
         string path;
         bool IsFirstTime = true;
-        string HeaderWithCaptions = "File, Folder, DuplicateOf, PageType, Patient, RequestID, SiteID, PageFrom, PageTo";
+        string HeaderWithCaptions = "File, Folder, DuplicateOf, PageType, Patient, RequestID, SiteID, RecognitionDetails, PageFrom, PageTo";
         const string COVER_PAGE = "Cover Page";
         const string EMPTY_STRING = "";
         private string logFilePath;
@@ -103,6 +103,7 @@ namespace TransformToCSV
                           csv.PatientName + ", " +
                           csv.ChartId + ", " +
                           csv.SiteId.ToString() + ", " +
+                          csv.RecognitionDetails + ", " +
                           csv.PageFrom.ToString() + ", " +
                           csv.PageTo.ToString();
                     file.WriteLine(row);
@@ -393,12 +394,17 @@ namespace TransformToCSV
             }
             listTable = resultList;
         }
+        /*
+         * 01/02/2017
+         * Added RecognitionDetails column
+         * Procedure isTheSamePatient became isTheSamePatientAndDetails
+         */
         private void CondensedPatient(int iCurrent, ref int iLastProcessed)
         {
             int i = iCurrent;
             var pg = listTable[iCurrent];
             for (i = iCurrent + 1; i < listTable.Count; i++)
-                if (!pg.isTheSamePatient(listTable[i]))
+                if (!pg.isTheSamePatientAndDetails(listTable[i]))
                 {
                     pg.PageTo = listTable[i - 1].PageTo;
                     pg.ChartId = string.IsNullOrEmpty(pg.ChartId) ? listTable[i - 1].ChartId : pg.ChartId;
@@ -451,6 +457,7 @@ namespace TransformToCSV
 		'' as PatientName,
 		null as ChartId, 
 		p.PreSiteID as SiteId,
+        p.RecognitionDetails,
 		p.PageNr as PageNr,
         p.PageNr as PageFrom,
      	p.PageNr as PageTo
@@ -469,6 +476,7 @@ Select  distinct
 		p.PreMemberFirstName + ' ' + p.PreMemberLastName as PatientName,
 		p.PreChartID as ChartId, 
 		p.PreSiteID as SiteId,
+        p.RecognitionDetails,
 		p.PageNr as PageNr,
 		p.PageNr as pageFrom,
 		p.PageNr as PageTo
@@ -492,9 +500,10 @@ Order by PageFrom";
                         csv.PatientName = (rdr[4] as string) ?? string.Empty; // bug can be null later used as not null
                         csv.ChartId = rdr[5] as string ?? string.Empty;
                         csv.SiteId = (int)((rdr[6] as int?) ?? 0);
-                        csv.PageNr = (int)rdr[7];
-                        csv.PageFrom = (int)rdr[8];
-                        csv.PageTo = (int)rdr[9];
+                        csv.RecognitionDetails = rdr[7] as string ?? string.Empty;
+                        csv.PageNr = (int)rdr[8];
+                        csv.PageFrom = (int)rdr[9];
+                        csv.PageTo = (int)rdr[10];
                         listTable.Add(csv);
                     }
                     rdr.Close();

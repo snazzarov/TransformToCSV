@@ -18,14 +18,18 @@ namespace TransformToCSV
         public string PatientName;
         public string ChartId;
         public int SiteId;
+        public string RecognitionDetails;
         public int PageFrom;
         public int PageTo;
         // PageNr is excluded from CSV-file
         public int PageNr;
 
-        internal bool isTheSamePatient(CsvColumns csvColumns)
+        internal bool isTheSamePatientAndDetails(CsvColumns csvColumns)
         {
-            return PatientName.ToUpper() == csvColumns.PatientName.ToUpper();
+            if ((PatientName.ToUpper() == csvColumns.PatientName.ToUpper()) &&
+                (RecognitionDetails == csvColumns.RecognitionDetails))
+                    return true;
+            return false;
         }
         internal bool isCoverPage(CsvColumns csvColumns)
         {
