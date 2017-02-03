@@ -13,7 +13,7 @@ namespace TransformToCSV
         public int Id;
         public string FileName;
         public string FolderName;
-        public int DuplicatOf;
+        public string DuplicateOf;
         public string PageType;
         public string PatientName;
         public string ChartId;

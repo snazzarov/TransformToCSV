@@ -4,6 +4,7 @@ using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace TransformToCSV
@@ -98,7 +99,7 @@ namespace TransformToCSV
                 {
                     row = csv.FileName + ", " +
                           csv.FolderName + ", " +
-                          csv.DuplicatOf + ", " +
+                          csv.DuplicateOf + ", " +
                           csv.PageType + ", " +
                           csv.PatientName + ", " +
                           csv.ChartId + ", " +
@@ -433,8 +434,20 @@ namespace TransformToCSV
             pg.PageTo = listTable[listTable.Count - 1].PageFrom;
             iLastProcessed = listTable.Count - 1;
         }
+        /*
+         * 2) NextPage(1), and NextPage(2), or PreviousPage(1), PreviousPage(2) should be considered as just NextPage or PreviousPage, 
+         *  т.е. должно удалять ( d ) после Previous or Next page
+         */
+        private void ChangeRecognitionDetails()
+        {
+            for (int i = 0; i < listTable.Count; i++)
+            {
+                listTable[i].RecognitionDetails = Regex.Replace(listTable[i].RecognitionDetails, @"\(\d+\)", "", RegexOptions.IgnoreCase).Trim();
+            }
+        }
         private void TransformList()
         {
+            ChangeRecognitionDetails();
             Check2ndCondition();
             Check3rdCondition();
             Check4thCondition();
@@ -452,7 +465,8 @@ namespace TransformToCSV
 @"Select  distinct
 		d.ImageFiles as FileName, 
         d.OriginalName as FolderName, 
-		d.DuplicateOf as DuplicatOf,
+--		d.DuplicateOf as DuplicatOf,
+		lj.OriginalName as DuplicateOf,
 	    t.Name as PageType, 
 		'' as PatientName,
 		null as ChartId, 
@@ -463,7 +477,9 @@ namespace TransformToCSV
      	p.PageNr as PageTo
 From [Documents] d inner join [DocumentPages] p 
 		on (d.ID = p.DocumentID)
-		inner join [DocumentPageTypes] t
+    left join [Documents] lj
+    on (d.DuplicateOf = lj.ID)
+    inner join [DocumentPageTypes] t
 		on (t.ID = p.PreDocumentPageTypeID) 
 		and t.Name in ('Cover Page')
 		and d.Id = @DocId
@@ -471,7 +487,8 @@ union
 Select  distinct 
 		d.ImageFiles as FileName, 
         d.OriginalName as FolderName, 
-		d.DuplicateOf as DuplicatOf,
+--		d.DuplicateOf as DuplicatOf,
+		lj.OriginalName as DuplicateOf,
 	    t.Name as PageType, 
 		p.PreMemberFirstName + ' ' + p.PreMemberLastName as PatientName,
 		p.PreChartID as ChartId, 
@@ -482,6 +499,8 @@ Select  distinct
 		p.PageNr as PageTo
 From [Documents] d inner join [DocumentPages] p 
 		on (d.ID = p.DocumentID)
+    left join [Documents] lj
+    on (d.DuplicateOf = lj.ID)
 		inner join DocumentPageTypes t
 		on (t.ID = p.PreDocumentPageTypeID) 
 		and t.Name not in ('Poor Quality', 'Cover Page')
@@ -495,7 +514,7 @@ Order by PageFrom";
                         CsvColumns csv = new CsvColumns();
                         csv.FileName = rdr[0] as string;
                         csv.FolderName = rdr[1] as string;
-                        csv.DuplicatOf = (int)((rdr[2] as int?) ?? 0);
+                        csv.DuplicateOf = rdr[2] as string;
                         csv.PageType = rdr[3] as string;
                         csv.PatientName = (rdr[4] as string) ?? string.Empty; // bug can be null later used as not null
                         csv.ChartId = rdr[5] as string ?? string.Empty;
